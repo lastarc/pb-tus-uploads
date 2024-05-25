@@ -1,0 +1,61 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload</title>
+    <script defer src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <link href="https://releases.transloadit.com/uppy/v3.25.3/uppy.min.css" rel="stylesheet">
+</head>
+<body>
+
+<p>Hello from <span data-username></span></p>
+<hr>
+
+<div id="uppy"></div>
+
+<div id="status-bar"></div>
+
+<script type="module">
+    import { Uppy, DragDrop, StatusBar, Tus } from "https://releases.transloadit.com/uppy/v3.25.3/uppy.min.mjs"
+    import PocketBase from 'https://esm.sh/pocketbase@0.21.2';
+
+    const pb = new PocketBase("http://localhost:8090");
+
+    if (!pb.authStore.isValid) {
+        let w = window.open();
+        await pb
+            .collection('users')
+            .authWithOAuth2({
+                provider: 'discord',
+                urlCallback: (url) => {
+                    w.location.href = url
+                },
+            });
+        $('[data-username]').text(pb.authStore.model?.username || 'N/A');
+    }
+
+    const uppy = new Uppy()
+    window._uppy = uppy
+    uppy
+        .use(DragDrop, { target: '#uppy' })
+        .use(StatusBar, { target: '#status-bar' })
+        .use(Tus, {
+            endpoint: 'http://localhost:8090/uploads',
+            headers: {
+                authorization: `Bearer ${pb.authStore.token}`,
+            },
+            chunkSize: 5 * 1024 * 1024, // 5MB
+
+        })
+        .addPostProcessor(function (ids) {
+            console.log(ids)
+        });
+
+    $('[data-username]').text(pb.authStore.model?.username || 'N/A');
+
+</script>
+
+</body>
+</html>
