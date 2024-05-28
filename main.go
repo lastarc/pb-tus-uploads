@@ -71,8 +71,9 @@ func main() {
 	}
 
 	app.OnBeforeServe().Add(func(e *core.ServeEvent) error {
+		var uploadsCollectionId string
 
-		_, err := app.Dao().FindCollectionByNameOrId("uploads")
+		existingUploadsCollection, err := app.Dao().FindCollectionByNameOrId("uploads")
 		if err != nil {
 			collection := &models.Collection{}
 
@@ -121,6 +122,52 @@ func main() {
 					MaxSelect: 1,
 					MaxSize:   4 * 1024 * 1024 * 1024, // 4GB
 					Protected: true,
+				},
+			})
+
+			if err := form.Submit(); err != nil {
+				return err
+			}
+
+			existingUploadsCollection, err = app.Dao().FindCollectionByNameOrId("uploads")
+			if err != nil {
+				panic(fmt.Errorf("uploads collection not found even after creating it"))
+			}
+		}
+		uploadsCollectionId = existingUploadsCollection.Id
+
+		app.Logger().Debug("", "uploadsCollectionId", uploadsCollectionId)
+
+		_, err = app.Dao().FindCollectionByNameOrId("access_refs")
+		if err != nil {
+			collection := &models.Collection{}
+
+			form := forms.NewCollectionUpsert(app, collection)
+			form.Name = "access_refs"
+			form.Type = models.CollectionTypeBase
+			form.ListRule = types.Pointer("user.id = @request.auth.id")
+			form.ViewRule = types.Pointer("user.id = @request.auth.id")
+			form.CreateRule = types.Pointer("user.id = @request.auth.id && upload.user.id = @request.auth.id")
+			form.UpdateRule = types.Pointer("user.id = @request.auth.id")
+			form.DeleteRule = types.Pointer("user.id = @request.auth.id")
+			form.Schema.AddField(&schema.SchemaField{
+				Name:     "upload",
+				Type:     schema.FieldTypeRelation,
+				Required: true,
+				Options: &schema.RelationOptions{
+					MinSelect:    nil,
+					MaxSelect:    types.Pointer(1),
+					CollectionId: uploadsCollectionId,
+				},
+			})
+			form.Schema.AddField(&schema.SchemaField{
+				Name:     "user",
+				Type:     schema.FieldTypeRelation,
+				Required: true,
+				Options: &schema.RelationOptions{
+					MinSelect:    nil,
+					MaxSelect:    types.Pointer(1),
+					CollectionId: "_pb_users_auth_",
 				},
 			})
 
@@ -351,6 +398,47 @@ func main() {
 
 			return c.NoContent(http.StatusOK)
 		}, apis.RequireRecordAuth())
+
+		e.Router.GET("/accref/:access_ref_id", func(c echo.Context) error {
+			var accessRefId string
+
+			if accessRefId = c.PathParam("access_ref_id"); accessRefId == "" {
+				return apis.NewBadRequestError("no access_ref_id", nil)
+			}
+
+			accessRef, err := app.Dao().FindRecordById("access_refs", accessRefId)
+			if err != nil {
+				return apis.NewNotFoundError("", nil)
+			}
+
+			if errs := app.Dao().ExpandRecord(accessRef, []string{"upload"}, nil); len(errs) > 0 {
+				return apis.NewApiError(http.StatusInternalServerError, fmt.Sprintf("failed to expand: %v", errs), nil)
+			}
+
+			upload := accessRef.ExpandedOne("upload")
+			if upload == nil {
+				return apis.NewNotFoundError("", nil)
+			}
+
+			key := upload.BaseFilesPath() + "/" + upload.GetString("file")
+
+			fsys, _ := app.NewFilesystem()
+			defer fsys.Close()
+
+			blob, _ := fsys.GetFile(key)
+			defer blob.Close()
+
+			c.Response().Header().Set("Content-Type", upload.GetString("mime_type"))
+
+			http.ServeContent(c.Response(), c.Request(), upload.GetString("filename"), upload.Updated.Time(), blob)
+
+			//c.Response().Header().Set("Accept-Ranges", "bytes")
+			//c.Response().Header().Set("Content-Disposition", "attachment; filename=\""+upload.GetString("filename")+"\"")
+			//
+			//return c.Stream(200, upload.GetString("mime_type"), blob)
+
+			return nil
+		})
 
 		e.Router.GET("/*", apis.StaticDirectoryHandler(os.DirFS("./pb_public"), false))
 
