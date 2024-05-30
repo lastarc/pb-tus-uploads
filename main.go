@@ -138,12 +138,12 @@ func main() {
 
 		app.Logger().Debug("", "uploadsCollectionId", uploadsCollectionId)
 
-		_, err = app.Dao().FindCollectionByNameOrId("access_refs")
+		_, err = app.Dao().FindCollectionByNameOrId("accessRefs")
 		if err != nil {
 			collection := &models.Collection{}
 
 			form := forms.NewCollectionUpsert(app, collection)
-			form.Name = "access_refs"
+			form.Name = "accessRefs"
 			form.Type = models.CollectionTypeBase
 			form.ListRule = types.Pointer("user.id = @request.auth.id")
 			form.ViewRule = types.Pointer("user.id = @request.auth.id")
@@ -275,6 +275,7 @@ func main() {
 				return apis.NewApiError(http.StatusInternalServerError, "failed to create new upload record", err)
 			}
 
+			// TODO: use host header for app url, otherwise it's bound for only one url with cors restrictions
 			location := fmt.Sprintf("%s/uploads/%s", app.Settings().Meta.AppUrl, record.Id)
 			c.Response().Header().Set("Location", location)
 			return c.NoContent(http.StatusCreated)
@@ -406,7 +407,7 @@ func main() {
 				return apis.NewBadRequestError("no access_ref_id", nil)
 			}
 
-			accessRef, err := app.Dao().FindRecordById("access_refs", accessRefId)
+			accessRef, err := app.Dao().FindRecordById("accessRefs", accessRefId)
 			if err != nil {
 				return apis.NewNotFoundError("", nil)
 			}
