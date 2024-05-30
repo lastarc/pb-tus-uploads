@@ -4,58 +4,217 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!--    <meta name="color-scheme" content="light dark" />-->
     <title>Upload</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.pink.min.css" />
     <script defer src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <link href="https://releases.transloadit.com/uppy/v3.25.3/uppy.min.css" rel="stylesheet">
+    <style>
+        body {
+            min-height: 100vh;
+            background-color: var(--pico-background-color);
+            color: var(--pico-color);
+        }
+
+        @font-face {
+            font-family: 'Monogram';
+            src: url('static/monogram.ttf') format('truetype');
+        }
+
+        footer {
+            font-family: 'Monogram', monospace;
+        }
+    </style>
 </head>
 <body>
+<body data-theme="light">
+    <header class="container">
+        <nav>
+            <ul>
+            </ul>
+            <ul>
+                <li><strong data-var-username>User</strong></li>
+                <li><a href="#" data-action-logout>Logout</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main class="container">
+        <section>
+            <h1>Upload new file</h1>
 
-<p>Hello from <span data-username></span></p>
-<hr>
+            <div id="uppy"></div>
 
-<div id="uppy"></div>
+            <div id="status-bar"></div>
+        </section>
+        <section>
+            <h1>History</h1>
 
-<div id="status-bar"></div>
+            <div class="overflow-auto" style="max-width: 100%">
+                <table class="striped">
+                    <thead>
+                    <tr>
+                        <th scope="col">Filename</th>
+                        <th scope="col">Mime Type</th>
+                        <th scope="col">Size</th>
+                    </tr>
+                    </thead>
+                    <tbody data-var-uploadHistory>
+                        <tr>
+                            <th scope="row">
+                                <a href="https://localhost:8090/accref/enfqiioqefbqofq">
+                                    test.png
+                                </a>
+                            </th>
+                            <td>image/png</td>
+                            <td>278K</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
 
-<script type="module">
-    import { Uppy, DragDrop, StatusBar, Tus } from "https://releases.transloadit.com/uppy/v3.25.3/uppy.min.mjs"
-    import PocketBase from 'https://esm.sh/pocketbase@0.21.2';
 
-    const pb = new PocketBase("http://localhost:8090");
 
-    if (!pb.authStore.isValid) {
-        let w = window.open();
-        await pb
-            .collection('users')
-            .authWithOAuth2({
-                provider: 'discord',
-                urlCallback: (url) => {
-                    w.location.href = url
+    <footer class="container" style="text-align: center; color: dimgray; text-decoration:underline; text-decoration-style: dotted;">
+        <small data-tooltip="Ehe~" style="cursor: help;">
+            Developed by Arc
+        </small>
+    </footer>
+
+    <script type="module">
+        import { Uppy, DragDrop, StatusBar, Tus } from "https://releases.transloadit.com/uppy/v3.25.3/uppy.min.mjs"
+        import PocketBase from 'https://esm.sh/pocketbase@0.21.2';
+
+        const pb = new PocketBase('/');
+        const redirectUrl = location.protocol + '//' + location.host +  '/upload.html';
+        const params = (new URL(window.location)).searchParams;
+
+        const formatBytes = (bytes) => {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            const size = parseFloat((bytes / Math.pow(k, i)).toFixed(1));
+            return `${size}&nbsp;${sizes[i]}`;
+        }
+
+        if (!pb.authStore.isValid && !params.get('code') && !params.get('state')) {
+            const authMethods = await pb.collection('users').listAuthMethods();
+            console.log(authMethods)
+            const provider = authMethods.authProviders.find(i => i.name.toLowerCase() === 'discord');
+            if (provider) {
+                localStorage.setItem('provider', JSON.stringify(provider));
+                window.location.href = provider.authUrl + redirectUrl
+            }
+        } else if (params.get('code') && params.get('state')) {
+            const provider = JSON.parse(localStorage.getItem('provider') || '{}')
+            if (provider.state !== params.get('state')) {
+                throw "State parameters don't match.";
+            }
+
+            pb.collection('users').authWithOAuth2Code(
+                provider.name,
+                params.get('code'),
+                provider.codeVerifier,
+                redirectUrl,
+                // pass optional user create data
+                {
+                    emailVisibility: false,
+                }
+            ).then((authData) => {
+                console.log(authData);
+                // document.getElementById('content').innerText = JSON.stringify(authData, null, 2);
+            }).catch((err) => {
+                console.error(err);
+                // document.getElementById('content').innerText = "Failed to exchange code.\n" + err;
+            }).finally(() => {
+                localStorage.setItem('provider', '')
+                location.href = redirectUrl
+            })
+        } else {
+            console.error(pb.authStore.isValid, params.get('code'), params.get('state'))
+        }
+
+        const uppy = new Uppy()
+        window._uppy = uppy
+        uppy
+            .use(DragDrop, { target: '#uppy' })
+            .use(StatusBar, { target: '#status-bar' })
+            .use(Tus, {
+                endpoint: '/uploads',
+                headers: {
+                    authorization: `Bearer ${pb.authStore.token}`,
                 },
+                chunkSize: 5 * 1024 * 1024, // 5MB
+
+            })
+            .addPostProcessor(function (ids) {
+                console.log(ids)
+
+                // TODO: there's a delay between upload completion and its presence in the storage bucket
+                Promise.all(ids.map(id => {
+                    const file = uppy.getFile(id);
+                    console.log(file);
+                    const uploadUrl = new URL(file.uploadURL);
+                    const uid = uploadUrl.pathname.slice(uploadUrl.pathname.lastIndexOf('/') + 1);
+
+                    return pb.collection('accessRefs').create({
+                        upload: uid,
+                        user: pb.authStore.model.id,
+                    })
+                })).then(() => {
+                    loadHistory();
+                })
+
             });
-        $('[data-username]').text(pb.authStore.model?.username || 'N/A');
-    }
 
-    const uppy = new Uppy()
-    window._uppy = uppy
-    uppy
-        .use(DragDrop, { target: '#uppy' })
-        .use(StatusBar, { target: '#status-bar' })
-        .use(Tus, {
-            endpoint: 'http://localhost:8090/uploads',
-            headers: {
-                authorization: `Bearer ${pb.authStore.token}`,
-            },
-            chunkSize: 5 * 1024 * 1024, // 5MB
+        $('[data-var-username]').text(pb.authStore.model?.username || 'N/A');
 
+        $('[data-action-logout]').on('click', () => {
+            pb.authStore.clear();
+            const keys = Object.keys(localStorage).filter((key) => key.startsWith('tus::'));
+            keys.forEach((key) => localStorage.removeItem(key));
+            $('[data-var-username]').text(pb.authStore.model?.username || 'N/A (need reload)');
         })
-        .addPostProcessor(function (ids) {
-            console.log(ids)
-        });
 
-    $('[data-username]').text(pb.authStore.model?.username || 'N/A');
+        const loadHistory = async () => {
+            const lst = await pb.collection('uploads').getFullList({
+                expand: "accessRefs_via_upload",
+                sort: "-created",
+            });
+            $('[data-var-uploadHistory]').html(
+                (await Promise.all(lst.map(async (i) => {
+                    let link = i.expand?.accessRefs_via_upload?.length > 0 ? `/accref/${i.expand?.accessRefs_via_upload[0].id}` : '#'
 
-</script>
+                    if (link === '#') {
+                        const accessRef = await pb.collection('accessRefs').create({
+                            upload: i.id,
+                            user: pb.authStore.model.id,
+                        }, {
+                            requestKey: i.id
+                        });
+
+                        link = `/accref/${accessRef.id}`
+                    }
+
+                    return `
+                    <tr>
+                        <th scope="row">
+                            <a href="${link}">
+                                ${i.filename}
+                            </a>
+                        </th>
+                        <td>${i.mime_type}</td>
+                        <td>${formatBytes(i.size)}</td>
+                    </tr>
+                    `
+                }))).join('\n')
+            )
+        };
+
+        loadHistory();
+    </script>
 
 </body>
 </html>
