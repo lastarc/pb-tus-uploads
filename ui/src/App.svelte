@@ -242,7 +242,6 @@
     :global(body) {
         background-color: var(--pico-background-color);
         color: var(--pico-color);
-        overflow: hidden;
     }
 
     @font-face {
