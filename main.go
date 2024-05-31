@@ -210,9 +210,10 @@ func main() {
 				Type:     schema.FieldTypeRelation,
 				Required: true,
 				Options: &schema.RelationOptions{
-					MinSelect:    nil,
-					MaxSelect:    types.Pointer(1),
-					CollectionId: "_pb_users_auth_",
+					MinSelect:     nil,
+					MaxSelect:     types.Pointer(1),
+					CollectionId:  "_pb_users_auth_",
+					CascadeDelete: true,
 				},
 			})
 			form.Schema.AddField(&schema.SchemaField{
@@ -256,9 +257,10 @@ func main() {
 				Type:     schema.FieldTypeRelation,
 				Required: true,
 				Options: &schema.RelationOptions{
-					MinSelect:    nil,
-					MaxSelect:    types.Pointer(1),
-					CollectionId: uploadsCollectionId,
+					MinSelect:     nil,
+					MaxSelect:     types.Pointer(1),
+					CollectionId:  uploadsCollectionId,
+					CascadeDelete: true,
 				},
 			})
 			form.Schema.AddField(&schema.SchemaField{
@@ -266,9 +268,10 @@ func main() {
 				Type:     schema.FieldTypeRelation,
 				Required: true,
 				Options: &schema.RelationOptions{
-					MinSelect:    nil,
-					MaxSelect:    types.Pointer(1),
-					CollectionId: "_pb_users_auth_",
+					MinSelect:     nil,
+					MaxSelect:     types.Pointer(1),
+					CollectionId:  "_pb_users_auth_",
+					CascadeDelete: true,
 				},
 			})
 
