@@ -1,4 +1,4 @@
-FROM golang:alpine as server-builder
+FROM golang:alpine AS server-builder
 
 RUN apk add --no-cache git
 
@@ -9,7 +9,7 @@ COPY go.mod go.sum main.go ./
 
 RUN go build -o server .
 
-FROM node:alpine as ui-builder
+FROM node:alpine AS ui-builder
 
 RUN corepack enable
 
