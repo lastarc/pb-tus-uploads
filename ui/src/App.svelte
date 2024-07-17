@@ -119,6 +119,10 @@
         }).then(uploadHistory.set)
 
     onMount(() => {
+        if (!pb.authStore.isValid) {
+            pb.authStore.clear()
+        }
+
         user.set(pb.authStore.model)
 
         const _redirectUrl = new URL(location.href)
