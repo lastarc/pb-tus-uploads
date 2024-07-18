@@ -119,11 +119,13 @@
         }).then(uploadHistory.set)
 
     onMount(() => {
-        if (!pb.authStore.isValid) {
-            pb.authStore.clear()
+        try {
+            pb.authStore.isValid && pb.collection('users').authRefresh()
+                .then(() => user.set(pb.authStore.model));
+        } catch (_) {
+            pb.authStore.clear();
+            user.set(null)
         }
-
-        user.set(pb.authStore.model)
 
         const _redirectUrl = new URL(location.href)
         _redirectUrl.search = ''
